@@ -22,28 +22,45 @@ public class AppPermissionsModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void getInstalledAppsWithPermissions(Promise promise) {
-        PackageManager pm = getReactApplicationContext().getPackageManager();
-        WritableArray appsArray = Arguments.createArray();
+public void getInstalledAppsWithPermissions(Promise promise) {
+    List<Map<String, Object>> appsWithPermissions = new ArrayList<>();
+    PackageManager pm = getReactApplicationContext().getPackageManager();
+    List<ApplicationInfo> packages = pm.getInstalledApplications(PackageManager.GET_META_DATA);
 
-        for (PackageInfo packageInfo : pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)) {
-            WritableMap appData = Arguments.createMap();
-            appData.putString("appName", packageInfo.applicationInfo.loadLabel(pm).toString());
-            appData.putString("packageName", packageInfo.packageName);
+    // Define sensitive permissions of interest
+    List<String> sensitivePermissions = Arrays.asList(
+            Manifest.permission.CAMERA,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.RECORD_AUDIO
+            // Add other sensitive permissions as needed
+    );
 
-            WritableArray permissionsArray = Arguments.createArray();
+    for (ApplicationInfo appInfo : packages) {
+        Map<String, Object> appData = new HashMap<>();
+        List<String> appPermissions = new ArrayList<>();
 
+        try {
+            PackageInfo packageInfo = pm.getPackageInfo(appInfo.packageName, PackageManager.GET_PERMISSIONS);
             if (packageInfo.requestedPermissions != null) {
                 for (String permission : packageInfo.requestedPermissions) {
-                    permissionsArray.pushString(permission);
+                    if (sensitivePermissions.contains(permission)) {
+                        appPermissions.add(permission);
+                    }
                 }
             }
-
-            appData.putArray("permissions", permissionsArray);
-            appsArray.pushMap(appData);
+            if (!appPermissions.isEmpty()) { // Only add apps with sensitive permissions
+                appData.put("appName", pm.getApplicationLabel(appInfo).toString());
+                appData.put("packageName", appInfo.packageName);
+                appData.put("permissions", appPermissions);
+                appsWithPermissions.add(appData);
+            }
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
         }
-
-        promise.resolve(appsArray);
     }
+    promise.resolve(Arguments.makeNativeArray(appsWithPermissions));
+}
+
 }
 
